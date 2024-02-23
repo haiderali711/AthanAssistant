@@ -1,8 +1,6 @@
 import speech_recognition as sr
 from elevenlabs.client import ElevenLabs
 import subprocess
-# Initialize your API keys and client
-# openai.api_key = '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'
 elevenlabs_client = ElevenLabs(api_key="65882d98b6272c225e535c6c2eb4901b")
 
 
