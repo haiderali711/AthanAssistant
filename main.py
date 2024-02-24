@@ -1,10 +1,50 @@
+import time
+import pyttsx3
+import requests
 import speech_recognition as sr
-from elevenlabs.client import ElevenLabs
+from datetime import datetime
 import subprocess
-elevenlabs_client = ElevenLabs(api_key="65882d98b6272c225e535c6c2eb4901b")
+import os
+os.environ['PATH'] += os.pathsep + '/usr/local/bin/'
 
 
-# Function to transcribe audio to text using Google Cloud Speech-to-Text
+dailyTimings = []
+prayers = ["Fajar", "Dhuhr", "Asar", "Maghrib", "Isha"]
+
+
+def fetchTimes():
+    f = open('locationData.txt', 'r')
+    city = f.readline().strip('\n')
+    country = f.readline().strip('\n')
+    method = f.readline().strip('\n')
+    api_link = 'http://api.aladhan.com/v1/timingsByCity?city=' + city + '&country=' + country + '&method=' + method
+
+    print(f'City : {city}')
+    print(f'Country: {country}')
+    print(f'Method : {method}')
+    print(f'Api Link : {api_link}')
+
+    response = requests.get(api_link)
+    json_data = response.json()['data']['timings']
+    fajr = json_data['Fajr']
+    duhar = json_data['Dhuhr']
+    asar = json_data['Asr']
+    maghrib = json_data['Maghrib']
+    isha = json_data['Isha']
+    dailyTimings.append(fajr)
+    dailyTimings.append(duhar)
+    dailyTimings.append(asar)
+    dailyTimings.append(maghrib)
+    dailyTimings.append(isha)
+    print(dailyTimings)
+
+
+def speak(_text):
+    engine = pyttsx3.init()
+    engine.say(_text)
+    engine.runAndWait()
+
+
 def transcribe_audio():
     recognizer = sr.Recognizer()
     # Use the microphone as source for input.
@@ -25,15 +65,6 @@ def transcribe_audio():
             print("Could not request results from Google Speech Recognition service; {0}".format(e))
 
 
-# Function to synthesize text to speech using ElevenLabs
-def synthesize_text(text, output_file_path):
-    # Hypothetical method call, adjust based on actual library usage
-    response = elevenlabs_client.synthesize_speech(text=text, voice_id="bella")
-    with open(output_file_path, "wb") as file:
-        file.write(response.audio_content)
-    print(f"Synthesized speech saved to {output_file_path}")
-
-
 def main():
     while True:
         # Step 2: Transcribe audio to text
@@ -45,32 +76,56 @@ def main():
             # Check if the text contains both "tv" and "on"
             if "tv" in text_lower and "on" in text_lower:
                 turn_tv_on()
-                print("Turning TV on.")
 
             # Check if the text contains both "tv" and "off"
             elif "tv" in text_lower and "off" in text_lower:
                 turn_tv_off()
-                print("Turning TV off.")
+            elif "prayer" in text_lower and "next" in text_lower and "time" in text_lower:
+                tell_next_azan()
             else:
-                print("No text transcribed.")
+                speak("This doesnt match any category")
 
 
 def turn_tv_on():
     print("TV is being turned on...")
-    status = subprocess.run(['./status.sh'], capture_output=True)
-    status = status.stdout
-    status = status.decode('utf-8')
-    print(type(status))
-    print(status)
     subprocess.run(['./on.sh'])
+    time.sleep(10)
+    speak("TV has been turned on")
 
 
 def turn_tv_off():
-    print("TV is being turned off...")
-    subprocess.run(['/off.sh'])
+    subprocess.run(['./on.sh'])                 #this changes the channel to raspberry if tv is already on
+    time.sleep(5)
+    speak("TV is being turned off...")
+    subprocess.run(['./off.sh'])
+
 
 def tell_next_azan():
-    print("Calculating time for next prayer ...")
+    subprocess.run(['./on.sh'])                 #this changes the channel to raspberry if tv is already on
+    time.sleep(10)
+    speak("Calculating time for next prayer ...")
+    fetchTimes()
+    now = datetime.now()                        # current date and time
+    current_time_str = now.strftime("%H:%M")
+    current_time = datetime.strptime(current_time_str, "%H:%M")
+
+    # Find the next prayer time
+    next_prayer_time = None
+    next_prayer_name = None
+    for i, prayer_time_str in enumerate(dailyTimings):
+        prayer_time = datetime.strptime(prayer_time_str, "%H:%M")
+        if prayer_time > current_time:
+            next_prayer_time = prayer_time_str
+            next_prayer_name = prayers[i]
+            break
+    time.sleep(3)
+    if next_prayer_time and next_prayer_name:
+        speak(f"The next prayer is {next_prayer_name} at {next_prayer_time}.")
+    else:
+        speak("No more prayers for today.")
+
+    time.sleep(5)
+    subprocess.run(['./off.sh'])
 
 
 if __name__ == "__main__":
